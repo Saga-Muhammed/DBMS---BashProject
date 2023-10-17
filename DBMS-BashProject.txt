@@ -1,0 +1,682 @@
+#! /usr/bin/bash
+export LC_COLLATE=C
+shopt -s extglob
+
+dbms_dir="DBMS"
+if [ ! -d "$dbms_dir" ]
+then
+    mkdir "$dbms_dir" 
+fi
+echo "~~~~~~~~~~~~~~ WELCOME TO DBMS ~~~~~~~~~~~~~~"
+
+function Main_Menu {
+  echo "***********************************"
+  echo " 1) Create Database"
+  echo " 2) Connect Database"
+  echo " 3) List Databases"
+  echo " 4) Drop Database"
+  echo " 5) Exit DBMS"
+  echo "-----------------------------------"
+  echo ">>> Please Enter your choice: "
+  read choice
+  case $choice in
+    1)  Create_DB ;;
+    2)  Connect_DB ;;
+    3)  List_DB ;;
+    4)  Drop_DB ;;
+    5) exit ;;
+    *) echo " Wrong Choice, Try Again " ; Main_Menu;
+  esac
+}
+#+++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+function Tables_Menu {
+  echo "***********************************"
+  echo " 1) Create New Table"
+  echo " 2) List All Tables"
+  echo " 3) Insert Into Table"
+  echo " 4) Select From Table"
+  echo " 5) Update Table"
+  echo " 6) Delete From Table"
+  echo " 7) Drop Table"
+  echo " 8) Main Menu"
+  echo " 9) Exit DBMS"
+  echo "-----------------------------------"
+  echo "Please Enter your choice:  "
+  read choice
+  case $choice in
+    1) Create_Table  ;;
+    2) List_Tables ;;
+    3) Insert_Into_Table ;;
+    4) Select_From_Table ;;
+    5) Update_Table ;;
+    6) Delete_From_Table ;;
+    7) Drop_Table ;;
+    8) Main_Menu ;;
+    9) exit ;;
+    *) echo " Wrong Choice, Try Again " ; Tables_Menu;
+  esac
+}
+#+++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+function Create_DB {
+  echo "Please Enter Database Name: "
+  read dbName
+  if [[ $dbName = "" ]]
+    	then
+    	echo -e "Invalid entry, please enter correct name" 
+	read -p "press any key "
+  elif [[ $dbName =~ [/.:\|\-] ]]
+	then
+	echo -e "Invalid,You can't enter these characters  \ . / : - | " 
+	read -p "press any key "
+  elif [[ $dbName =~ ^[a-zA-Z] ]]
+   	then
+        if [[ ! -d ./DBMS/$dbName ]]
+	    then
+	    mkdir ./DBMS/$dbName
+            echo "Database '$dbName' Created Successfully"
+	else
+	    echo  "Invalid, Database '$dbName' Already exists"
+	fi
+  else
+	echo "Database name can't start with numbers or special character"
+  fi
+  Main_Menu
+}
+#+++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+function Connect_DB {
+  echo "Please Enter Database Name: "
+  read dbName
+  cd ./DBMS/$dbName 2>>./.error.log
+  if [[ $? == 0 ]]
+  then
+    echo "Connected Successfully to Database '$dbName' "
+    Tables_Menu
+  else
+    echo "Database '$dbName' Is Not found"
+   Main_Menu
+  fi
+}
+#+++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+function List_DB {
+  echo "The existing Databases are:"
+  ls ./DBMS ;
+  Main_Menu
+}
+#+++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+function Drop_DB {
+  echo "Please Enter Database Name:"
+  read dbName
+  rm -r ./DBMS/$dbName 2>>./.error.log
+  if [[ $? == 0 ]]
+  then
+    echo "Database '$dbName' Dropped Successfully"
+  else
+    echo "Database '$dbName' Is Not found"
+  fi
+  Main_Menu 
+}
+#+++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+function Create_Table {
+  read -p "Please Enter Table Name: " tableName
+
+  # Check if table name is valid
+  if ! [[ $tableName =~ ^[A-Za-z_][A-Za-z0-9_]+$ ]]; then
+    echo "Invalid table name."
+    select option in "Try Again" "Exit Creation"; do
+      case $option in
+        "Try Again")
+          Create_Table
+          return
+          ;;
+        "Exit Creation")
+          echo "Failed to create Table $tableName"
+          Tables_Menu
+          ;;
+        *)
+          echo "Invalid option,Enter a valid option 1 or 2"
+          ;;
+      esac
+    done
+  fi
+
+  # Check if table already exists
+  if [[ -f "${tableName}_metadata.txt" ]]; then
+    echo "Table '$tableName' Already exists."
+    select option in "Try Again" "Exit Creation"; do
+      case $option in
+        "Try Again")
+          Create_Table
+          return
+          ;;
+        "Exit Creation")
+          echo "Failed to create Table $tableName"
+          Tables_Menu
+          ;;
+          *)
+          echo "Invalid option,Enter a valid option 1 or 2"
+          ;;
+      esac
+    done
+  fi
+
+  numColumns=""
+  while [[ ! $numColumns =~ ^[1-9][0-9]*$ ]]; do
+    read -p "Please enter the number of columns (excluding the primary key): " numColumns
+
+    if ! [[ $numColumns =~ ^[1-9][0-9]*$ ]]; then
+      echo "Invalid number of columns."
+      select option in "Try Again" "Exit Creation"; do
+        case $option in
+          "Try Again")
+            break
+            ;;
+          "Exit Creation")
+            echo "Failed to create Table $tableName"
+            Tables_Menu
+            ;;
+        *)
+          echo "Invalid option,Enter a valid option 1 or 2"
+          ;;
+        esac
+      done
+    fi
+  done
+
+  tableRecord=""
+  primaryKeyColumnName=""
+  primaryKeyColumnType=""
+  validDataTypes=("string" "number")
+
+  while [[ -z $primaryKeyColumnName || ! $primaryKeyColumnName =~ ^[A-Za-z_][A-Za-z0-9_]+$ ]]; do
+    read -p "Enter name for primary key column: " primaryKeyColumnName
+
+    if [[ -z $primaryKeyColumnName ]]; then
+      select option in "Try Again" "Exit Creation"; do
+        case $option in
+          "Try Again")
+            break
+            ;;
+          "Exit Creation")
+            echo "Failed to create Table $tableName"
+            Tables_Menu
+            ;;
+          *)
+          echo "Invalid option,Enter a valid option 1 or 2"
+          ;;
+        esac
+      done
+    elif [[ ! $primaryKeyColumnName =~ ^[A-Za-z_][A-Za-z0-9_]+$ ]]; then
+      echo "Invalid primary key column name."
+      select option in "Try Again" "Exit Creation"; do
+        case $option in
+          "Try Again")
+            break
+            ;;
+          "Exit Creation")
+            echo "Failed to create Table $tableName"
+            Tables_Menu
+            ;;
+          *)
+          echo "Invalid option,Enter a valid option 1 or 2"
+          ;;
+        esac
+      done
+    fi
+  done
+
+  tableRecord="${primaryKeyColumnName}"
+
+  dataType=""
+  while [[ -z $dataType || ! " ${validDataTypes[@]} " =~ " $dataType " ]]; do
+    select dataType in "string" "number"  "Exit Creation"; do
+      case $dataType in
+        "string")
+          tableRecord="${tableRecord}:string"
+          break
+          ;;
+        "number")
+          tableRecord="${tableRecord}:number"
+          break
+          ;;
+        "Exit Creation")
+          echo "Failed to create Table $tableName"
+          Tables_Menu
+          ;;
+        *)
+          echo "Invalid option,Enter a valid option 1 or 2 or 3"
+          ;;
+      esac
+    done
+  done
+
+  primaryKeyColumnType=$dataType
+
+  for ((i = 1; i <= numColumns; i++)); do
+    columnName=""
+    while [[ -z $columnName || $tableRecord == *$columnName* || ! $columnName =~ ^[A-Za-z_][A-Za-z0-9_]+$ ]]; do
+      read -p "Please Enter name for column $((i + 1)): " columnName
+
+      if [[ -z $columnName ]]; then
+        select option in "Try Again" "Exit Creation"; do
+          case $option in
+            "Try Again")
+              break
+              ;;
+            "Exit Creation")
+              echo "Failed to create Table $tableName"
+              Tables_Menu
+              ;;
+          esac
+        done
+      elif [[ $tableRecord == *$columnName* || ! $columnName =~ ^[A-Za-z_][A-Za-z0-9_]+$ ]]; then
+        echo "Invalid column name or column name already exists."
+        select option in "Try Again" "Exit Creation"; do
+          case $option in
+            "Try Again")
+              break
+              ;;
+            "Exit Creation")
+              echo "Failed to create Table $tableName"
+              Tables_Menu
+              ;;
+             *)
+          echo "Invalid option,Enter a valid option 1 or 2"
+          ;;
+          esac
+        done
+      else
+        break
+      fi
+    done
+
+    if [[ -z $columnName ]]; then
+      continue
+    fi
+
+    tableRecord="${tableRecord}:${columnName}"
+
+    select dataType in "string" "number" "Exit Creation"; do
+      case $dataType in
+        "string")
+          tableRecord="${tableRecord}:string"
+          break
+          ;;
+        "number")
+          tableRecord="${tableRecord}:number"
+          break
+          ;;
+        "Exit Creation")
+          echo "Failed to create Table $tableName"
+          Tables_Menu
+          ;;
+        *)
+          echo "Invalid option,Enter a valid option 1 or 2 or 3"
+          ;;
+      esac
+    done
+  done
+
+  # Create metadata and data files for the table
+  metadataFile="${tableName}_metadata.txt"
+  dataFile="${tableName}_data.txt"
+
+  touch "$metadataFile"
+  touch "$dataFile"
+
+  # Appending the table metadata to the metadata file
+  echo "$tableRecord" >> "$metadataFile"
+
+  echo "Table '$tableName' has been created successfully"
+Tables_Menu
+}
+#+++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+function List_Tables {
+  if [[ -n $(find . -maxdepth 1 -type f)  ]]
+  then
+	echo "Tables are:"
+	for datafile in *_data.txt; 
+	do
+  	  echo "${datafile%_data.txt}"
+	done
+  else
+    echo "No Tables found to show"
+  fi
+Tables_Menu
+}
+#+++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+function Insert_Into_Table {
+  while true; do
+    read -p "Please Enter table name to insert data into (or 'exit' to quit): " tableName
+
+    if [[ "$tableName" == "exit" ]]; then
+      echo "Insert canceled."
+      Tables_Menu 
+    elif [[ ! -f "${tableName}_metadata.txt" ]]
+      then
+      echo "Table '$tableName' does not exist"
+	Tables_Menu
+    else
+      break  # Exit the loop if a valid table name is provided
+    fi
+  done
+
+  # Read the table metadata to determine column names and data types
+  IFS=':' read -r -a columns < "${tableName}_metadata.txt"
+
+  # Initialize a variable to store the primary key value
+  primaryKey=""
+
+  # Get the primary key column name and data type from the metadata
+  PKName="${columns[0]}"
+  PKType="${columns[1]}"
+
+  while true; do
+    read -p "Please Enter the primary key value (type: $PKType): " PK
+
+    # Check if the primary key value already exists in the data file
+    dataFile="${tableName}_data.txt"
+    if grep -q "^$PK:" "$dataFile"; then
+      echo "Primary key value '$PK' already exists, Please enter different PK"
+    elif [[ "$PKType" == "number" && ! "$PK" =~ ^[0-9]+$ ]]; then
+      echo "Invalid entry, Primary key value must be a number"
+    elif [[ "$PKType" == "string" && -z "$PK" ]]; then
+      echo "Invalid entry, '$PKName' cannot be empty"
+    elif [[ ! "$PK" =~ ^[A-Za-z0-9_]+$ ]]; then
+      echo "Invalid, Special characters are not allowed in the primary key"
+    else
+      primaryKey="$PK"
+      break
+    fi
+  done
+
+  # Initialize an array to store the data in order
+  dataArray=()
+
+  # Iterate through the remaining columns
+  for ((i = 2; i < ${#columns[@]}; i += 2)); do
+    columnName="${columns[i]}"
+    dataType="${columns[i + 1]}"
+    
+    while true; do
+      read -p "Enter data for column '$columnName' (type: $dataType): " data
+      
+      # Validate data based on the data type
+      if [[ "$dataType" == "number" && ! "$data" =~ ^[0-9]+$ ]]; then
+        echo "Invalid input. Please enter a number for '$columnName'."
+      elif [[ "$dataType" == "string" && -z "$data" ]]; then
+        echo "Invalid input. '$columnName' cannot be empty."
+      elif [[ "$dataType" == "string" && "$data" =~ ^[0-9]+$ ]]; then
+        echo "Invalid input. '$columnName' cannot contain numbers."
+      elif [[ ! "$data" =~ ^[A-Za-z0-9_]+$ ]]; then
+        echo "Invalid input. Special characters are not allowed in the data."
+      else
+        # Data is valid, store it in the dataArray
+        dataArray+=("$data")
+        break
+      fi
+    done
+  done
+
+  # Construct the data record
+  dataRecord="$primaryKey:${dataArray[*]}"
+  dataRecord="${dataRecord// /:}"
+
+  # Append the data record to the data file
+  dataFile="${tableName}_data.txt"
+  echo "$dataRecord" >> "$dataFile"
+
+  echo "This record successfully inserted into '$tableName' "
+  Tables_Menu
+}
+#+++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+function Select_From_Table {
+  echo "Please Enter table name to select row: "
+  read tableName
+  if [[ ! -f "${tableName}_metadata.txt" ]]
+  then
+    echo "Table '$tableName' does not exist."
+    Tables_Menu
+  fi
+  
+select choice in "SelectAll" "selectRows"  "Exit"; do
+    case $REPLY in
+    1) 
+  # Read the table metadata column names and data types
+  tableMetadata=$(cat "${tableName}_metadata.txt")
+  IFS=':' read -r -a columns <<< "$tableMetadata"
+
+  # Construct the header by concatenating column names with colons
+  header=""
+  for ((i = 0; i < ${#columns[@]}; i += 2))
+  do
+    column_name="${columns[i]^^}"
+    header+=":$column_name"
+  done
+
+  # Remove the leading colon from the header
+  header="${header:1}"
+
+  # Display the formatted data using column separator ':'
+  column -t -s ":" <(echo "$header") "${tableName}_data.txt"
+ ;;
+    2) 
+    while true; do 
+        read -p "Which column do you want Select? " fieldname
+        # Read the table metadata column names and data types
+        tableMetadata=$(cat "${tableName}_metadata.txt")
+        IFS=':' read -r -a columns <<< "$tableMetadata"
+
+        # Initialize FieldNum to -1 to indicate no match found
+        FieldNum=-1
+
+        # Find the index of the selected field in the metadata
+        for ((index = 0; index < ${#columns[@]}; index += 2)); do
+            column_name="${columns[index]}"
+            if [[ "$fieldname" == "$column_name" ]]; then 
+                FieldNum=$((index / 2 + 1))
+                break
+            fi
+        done
+
+        # Check if the selected field was found in the metadata
+        if [ "$FieldNum" -eq -1 ]; then
+            echo "Invalid Column name, Please try again"
+        else
+            break
+        fi
+    done
+
+    while true; do
+        read -p "Where '$fieldname' equals to: " FieldValue
+
+        # Allow non-numeric values for FieldValue
+        if [ -n "$FieldValue" ]; then 
+            break
+        fi
+    done
+
+    header=""
+    for ((i = 0; i < ${#columns[@]}; i += 2)); do
+        header+=$(echo "${columns[i]^^},")
+    done
+
+    echo " The selected Data is:"
+    echo "$header" | column -t -s ","
+
+    # Extract the selected column and its values
+    awk -F: -v fnum="$FieldNum" -v fvalue="$FieldValue" -v OFS="|" 'BEGIN{print header} $fnum==fvalue{print $0}' "${tableName}_data.txt"| column -t -s ":"
+
+    echo "~~~~~~~~~~~~~~~~~~~~~~~~~~~"
+ ;;
+    3)  Tables_Menu ;;
+    *) echo " Wrong Choice  " ; Tables_Menu ;;
+    esac
+done
+}
+
+#+++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+function Update_Table {
+  while true; do
+    echo "Please Enter table name to update row (or 'exit' to cancel): "
+    read tableName
+
+    if [[ "$tableName" == "exit" ]]; then
+      echo "Update canceled."
+      Tables_Menu
+    elif [[ ! -f "${tableName}_metadata.txt" ]]
+      then
+      echo "Table '$tableName' does not exist"
+	Tables_Menu
+    else
+      break  # Exit the loop if a valid table name is provided
+    fi
+  done
+
+  echo "Please Enter the pk for the row to update: "
+  read primaryKey
+
+  PK=$(grep -n "^$primaryKey:" "${tableName}_data.txt" | cut -d: -f1)
+
+  # Check if no retrieval value
+  if [[ -z $PK ]]
+    then
+    echo "This pk '$primaryKey' does not exist in '$tableName' "
+    Tables_Menu
+  fi
+
+  read -p "Are you sure you want to update row with PK '$primaryKey' in '$tableName'? (yes/no): " confirm
+  if [[ "$confirm" != "yes" ]]; then
+    echo "Changes canceled"
+    Tables_Menu
+  fi
+
+  # Read the table metadata column names and data types
+  tableMetadata=$(cat "${tableName}_metadata.txt")
+  IFS=':' read -r -a columns <<< "$tableMetadata"
+  NewDataRow=""
+
+  # to update each column in the row
+  for ((i = 0; i < ${#columns[@]}; i += 2)); do
+    columnName="${columns[i]}"
+    dataType="${columns[i + 1]}"
+    currentDataRow=$(awk "NR==$PK{print \$i}" "${tableName}_data.txt")
+    while true; do 
+    echo "Current data record is : $currentDataRow"
+    #echo "Current column name '$columnName' it is a/an '$dataType' "
+    echo "Enter new '$columnName' it is ($dataType): "
+    read newData
+    # Validate data based on the data type
+    if [[ "$dataType" == "number" && ! "$newData" =~ ^[0-9]+$ ]]
+      then
+      echo "Invalid entry, Please enter a number for '$columnName' "
+    elif [[ "$dataType" == "string" && -z "$newData" ]]
+      then
+      echo "Invalid entry, '$columnName' cannot be empty "
+    else
+#to add separator after pk 
+	if [[ $i -ne 0 ]]; then
+           NewDataRow+=":"
+        fi
+
+        NewDataRow+="$newData"
+         break
+    fi
+    done
+  done
+
+  # Update the data in the row
+  sed -i "s|^${currentDataRow}$|${NewDataRow}|" "${tableName}_data.txt"
+  echo "Row with primary key '$primaryKey' in '$tableName' Updated Successfully"
+  Tables_Menu
+}
+
+#+++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+function Delete_From_Table {
+  while true; do
+    read -p "Please Enter the name of the table (or 'exit' to cancel): " tableName
+
+    if [[ "$tableName" == "exit" ]]; then
+      echo "Delete canceled"
+      Tables_Menu
+    fi
+
+    table_file="./${tableName}_data.txt"
+
+    # Check if the table file exists
+    if [[ ! -f "$table_file" ]]; then
+      echo "Table '$tableName' does not exist, Please enter a valid table name or 'exit' to cancel"
+    else
+      break
+    fi
+  done
+
+  while true; do
+    echo "~~~~~~~~~~~~~~~~~~~~~~~~~~~~~"
+    echo " 1) Delete Record"
+    echo " 2) Delete All Data"
+    echo " 3) Exit"
+    echo "~~~~~~~~~~~~~~~~~~~~~~~~~~~~~"
+    read -p " Please Enter your choice: " choice
+    case $choice in
+      1)
+   #to delete a row by primary key num
+    read -p "Enter Table Name: " tableName
+  #check if the table exists or not
+  if [[ ! -f "${tableName}_metadata.txt" ]]; then
+    echo "Table '$tableName' does not exist"
+    return
+  fi
+
+  read -p "Enter the primary key value of the record you want to delete: " primaryKey
+
+  tableFile="${tableName}_data.txt"
+  #check if the pk exists or not
+  if ! grep -q "^${primaryKey}:" "$tableFile"; then
+    echo "Primary key value '$primaryKey' does not exist in table '$tableName' "
+    return
+  fi
+
+  # delete the desired record
+  sed -i "/^${primaryKey}:/d" "$tableFile"
+
+  echo "Record with primary key '$primaryKey' in table '$tableName' has been deleted successfully "
+  Tables_Menu
+        ;;
+      2)
+#to delete all data from the table
+  read -p "Are you sure you want to delete all data from the table '$tableName'? (yes/no): " confirm
+  if [[ "$confirm" == "yes" ]]; then
+    > "./${tableName}_data.txt"
+    echo "All data deleted successfully from the table '${tableName}' "
+  else
+    echo "deletion canceled "
+    Tables_Menu
+  fi
+        ;;
+      3)
+        Tables_Menu
+        ;;
+      *)
+        echo "Invalid choice" ;;
+    esac
+  done
+}
+#+++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+function Drop_Table {
+  echo "Please Enter Table Name:"
+  read TableName
+  if [[ -f "${TableName}_metadata.txt" ]]
+  then
+	rm "${TableName}_metadata.txt"
+        rm "${TableName}_data.txt"
+	echo "Table '$TableName' Deleted Successfully"
+  else
+    echo "Table '$TableName' Is Not found"
+  fi
+Tables_Menu
+}
+
+#+++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+Main_Menu
+
+
